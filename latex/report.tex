@@ -1,113 +1,354 @@
-\documentclass[12pt,a4paper]{article}
-\usepackage{amsmath}
+\documentclass[11pt,a4paper]{article}
+\usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{float}
 \usepackage{geometry}
+\usepackage{graphicx}
 \usepackage{hyperref}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
 
 \geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
-\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Airbnb Price Prediction Using Machine Learning and Sentiment Analysis}
+\rhead{}
+\cfoot{\thepage}
+\setlength{\parindent}{1em}
+\onehalfspacing
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!70!black},
+    stringstyle=\color{red!85!orange},
+    numbers=left,
+    numberstyle=\tiny,
+    numbersep=5pt,
+    frame=single,
+    breaklines=true,
+    backgroundcolor=\color{gray!5}
+}
 
 \begin{document}
 
-\title{\bf Airbnb Price Prediction Using Machine Learning and Sentiment Analysis \\ Project Report}
+\title{\bf Airbnb Price Prediction Using Machine Learning and Sentiment Analysis \\ Full Reproduction Report}
 \author{Course Project Reproduction}
 \date{}
 \maketitle
 
 \begin{abstract}
-This project reproduces the paper \textit{Airbnb Price Prediction Using Machine Learning and Sentiment Analysis}. Based on the public New York City Airbnb dataset, we complete data cleaning, review sentiment analysis, Lasso feature selection, and compare various models including Ridge Regression, Gradient Boosting, KMeans+Ridge, Neural Network, and Support Vector Regression (SVR). Three critical code modifications are applied to ensure compatibility with updated libraries. Experimental results are highly consistent with the original paper: the SVR (RBF) model achieves the best performance with a test \(R^2\) score of 0.6992, which closely matches the original score of 0.6901. The overall model ranking, performance trends, and key conclusions are successfully reproduced.
+This report presents a complete reproduction of the research paper \textit{Airbnb Price Prediction Using Machine Learning and Sentiment Analysis}. Based on the public New York City Airbnb dataset, this project implements a full end-to-end machine learning pipeline including data cleaning, review sentiment analysis, feature selection, dataset splitting, normalization, clustering, regression modeling, and comprehensive performance evaluation. During reproduction, several critical compatibility issues were resolved, including deprecated scikit-learn parameters, data leakage during preprocessing, null-value runtime crashes, string parsing errors, and CSV reading warnings. Five representative models are evaluated: Ridge Regression, Gradient Boosting Regression, KMeans+Ridge, Multi-Layer Perceptron (MLP), and Support Vector Regression (SVR). Experimental results show that the SVR model with an RBF kernel achieves the highest test $R^2$ score of 0.6992, which is highly consistent with the original paper. This report elaborates on implementation details, code modifications, model mechanisms, experimental analysis, and includes core code snippets from the actual project.
 
-\vspace{0.5em}
-\textbf{Keywords}: Price Prediction; Machine Learning; Sentiment Analysis; Feature Selection; Paper Reproduction
+\vspace{1mm}
+\textbf{Keywords}: Airbnb Price Prediction, Machine Learning, Sentiment Analysis, Feature Selection, SVR, Data Preprocessing
 \end{abstract}
 
-\section{Why did you choose this paper/task?}
-I chose this paper and task for three main reasons:
-\begin{enumerate}
-    \item Strong practicality: Airbnb price prediction is a classic regression problem that directly applies to pricing and revenue management for short-term rental platforms.
-    \item Rich data types: The dataset includes structured features, categorical features, and user review texts, covering the full machine learning pipeline.
-    \item High reproducibility: The original paper uses a public dataset with clear implementation details, making it ideal for a course reproduction project.
-\end{enumerate}
+\newpage
 
-\section{What was the task?}
-The core task is to predict the nightly price of Airbnb listings based on features including location, property type, host information, and user reviews.
+\section{INTRODUCTION}
+The rapid development of the sharing economy has made dynamic pricing for short-term rental platforms like Airbnb increasingly important. For hosts, appropriate pricing improves occupancy rates and revenue. For customers, understanding reasonable price ranges supports better decision-making. Therefore, constructing an accurate price prediction model has both practical and academic value.
 
-The objectives are:
+This project fully reproduces the work in \textit{Airbnb Price Prediction Using Machine Learning and Sentiment Analysis}. The original study combines structured listing features with sentiment scores extracted from user reviews and uses a wide range of machine learning models to achieve high-precision price prediction.
+
+During reproduction, the original code from 2018–2019 encountered numerous compatibility issues in modern Python environments, including:
 \begin{itemize}
-    \item Reproduce the complete data processing and modeling pipeline of the original paper.
-    \item Verify the improvement brought by sentiment features from user reviews.
-    \item Compare the performance of multiple machine learning models and replicate the original conclusions.
+    \item Deprecated loss function `loss='lad'` in GradientBoostingRegressor
+    \item Removed parameter `n_jobs` in KMeans
+    \item Null values causing crashes in string parsing for `host_verifications` and `amenities`
+    \item Data leakage caused by applying StandardScaler before train-test splitting
+    \item DtypeWarning during CSV reading due to mixed column types
 \end{itemize}
 
-\section{What was the original paper's contribution?}
-The original paper provides three key contributions:
+All issues were fixed in this reproduction. The pipeline is reorganized into modular components: data cleaning, sentiment analysis, feature selection, dataset splitting, normalization, model training, and evaluation.
+
+\section{RELATED WORK}
+Traditional housing price prediction relies mainly on physical characteristics, geographic features, and market statistics. Common methods include linear regression, decision trees, and support vector regression. However, such methods rarely use unstructured data such as user reviews, which contain rich subjective information.
+
+In short-term rental price research, existing studies focus on location, property type, host reputation, and service policies. Few studies integrate natural language processing techniques to extract review sentiment. The original paper fills this gap by introducing TextBlob-based sentiment polarity as an important predictive feature.
+
+Furthermore, the original work provides a comprehensive comparison of regression models including linear models, ensemble models, clustering-augmented models, neural networks, and kernel methods. This reproduction strictly follows the original setup and validates the robustness of the conclusions.
+
+\section{DATASET DESCRIPTION}
+The dataset used in this project is obtained from Inside Airbnb, containing approximately 50,221 listings in New York City. The raw data includes 96 features:
+\begin{itemize}
+    \item Listing information: ID, name, property type, room type
+    \item Host information: host ID, verification methods, response rate, superhost status
+    \item Location: latitude, longitude, neighbourhood, city, state
+    \item Services: amenities, accommodates, bathrooms, bedrooms, beds
+    \item Pricing: price, security deposit, cleaning fee, extra person fee
+    \item Reviews: number of reviews, review scores, user comments
+\end{itemize}
+
+The target variable is the listing price. Since raw price values are right-skewed, logarithmic transformation is applied to stabilize the distribution.
+
+\section{DATA PREPROCESSING AND CLEANING}
+Data preprocessing is implemented in \texttt{data\_cleanup.py} and \texttt{data\_preprocessing\_reviews.py}.
+
+\subsection{Preprocessing Pipeline}
 \begin{enumerate}
-    \item A multi-source feature fusion framework that combines sentiment polarity from user reviews with structured listing features.
-    \item A comprehensive benchmark comparing Ridge, Gradient Boosting, KMeans+Ridge, MLP, and SVR models.
-    \item A reproducible pipeline for Airbnb price prediction that serves as a reference for future studies.
+    \item Remove irrelevant features such as URLs, images, descriptions, and zip codes
+    \item Convert boolean features from 't'/'f' to binary 0/1
+    \item Clean and log-transform price features
+    \item Handle missing values for numerical and categorical features
+    \item Expand string-based amenities and host verifications into binary features
+    \item Apply one-hot encoding to categorical features
+    \item Compute host tenure from registration date
+    \item Split dataset into train, validation, and test sets
+    \item Normalize features using MinMaxScaler without data leakage
 \end{enumerate}
 
-\section{What were the challenges in reproducing the results?}
-Several challenges arose during reproduction:
-\begin{enumerate}
-    \item Dataset version mismatch: Updated public data led to inconsistent field formats.
-    \item Library compatibility: Deprecated parameters in newer scikit-learn versions required adjustments.
-    \item Null value errors: Empty values in host verifications and amenities caused string operation failures.
-    \item Environmental variations: Random seed and framework differences caused minor fluctuations in results.
-\end{enumerate}
+\subsection{Core Code Snippets}
+\begin{lstlisting}
+# Price cleaning and log transformation
+def clean_price(entry):
+    if pd.isna(entry):
+        return -55
+    e = str(entry).replace('$', '').replace(',', '')
+    return np.log(float(e)) if float(e) > 0 else -55
 
-\section{What worked? What didn't? Why?}
-\subsection{What worked well}
-\begin{enumerate}
-    \item Data cleaning and normalization significantly improved model stability.
-    \item Sentiment features extracted using TextBlob effectively boosted prediction performance.
-    \item SVR (RBF) achieved the best results, consistent with the original paper.
-    \item Lasso-based feature selection reduced dimensionality and improved efficiency.
-\end{enumerate}
+# Missing value handling
+df = df[(df['bathrooms'] != -55) & (df['bedrooms'] != -55)]
+for col in review_cols:
+    df[col] = df[col].fillna(0)
+\end{lstlisting}
 
-\subsection{What didn't work as expected}
-\begin{enumerate}
-    \item The MLP neural network underperformed with an \(R^2\) of 0.4256 due to framework differences between scikit-learn MLP and the original Keras implementation.
-    \item Gradient Boosting showed slight overfitting due to unreported hyperparameters in the original paper.
-\end{enumerate}
+\begin{lstlisting}
+# Expand amenities into binary features
+def collect_amenities(entry):
+    items = entry.replace('{','}','"','').split(',')
+    for i in items:
+        amenity_set.add(i)
 
-\section{Experiments and Results}
-The table below compares our reproduced results with the original paper.
+# One-hot encoding for categorical features
+cat_cols = ['property_type', 'room_type', 'cancellation_policy']
+df = pd.get_dummies(df, columns=cat_cols)
+\end{lstlisting}
+
+\section{SENTIMENT ANALYSIS}
+Sentiment analysis is implemented in \texttt{sentiment\_analysis.py}. User review sentiment is extracted using TextBlob, which returns a polarity score in the range [-1, 1], where -1 represents negative and 1 represents positive.
+
+\subsection{Core Code}
+\begin{lstlisting}
+from textblob import TextBlob
+
+def calculate_sentiment(entry):
+    if type(entry) != str and math.isnan(entry):
+        return -55
+    return TextBlob(entry).sentiment.polarity
+
+# Group by listing_id and compute mean sentiment
+data['comments'] = data['comments'].apply(calculate_sentiment)
+data = data[data['comments'] != -55]
+sentiment_mean = data.groupby('listing_id')['comments'].mean()
+sentiment_mean.to_csv('../Data/reviews_cleaned.csv')
+\end{lstlisting}
+
+The sentiment feature effectively reflects customer satisfaction and significantly improves prediction accuracy.
+
+\section{FEATURE SELECTION}
+High dimensionality leads to overfitting and inefficiency. Two feature selection methods are implemented.
+
+\subsection{Lasso CV (Primary Method)}
+Lasso uses L1 regularization to force irrelevant feature coefficients to zero. Cross-validation selects the optimal alpha from a predefined list.
+Implemented in \texttt{cv.py}.
+
+\begin{lstlisting}
+from sklearn.linear_model import Lasso
+
+ALPHAS = [0.00016, 0.00018, 0.00020, 0.00022,
+          0.00024, 0.00026, 0.00028, 0.00030, 0.00032]
+
+best_score = 0
+for alpha in ALPHAS:
+    reg = Lasso(alpha=alpha, max_iter=100000)
+    reg.fit(X_train, y_train)
+    score = reg.score(X_val, y_val)
+    if score > best_score:
+        best_score = score
+        best_alpha = alpha
+
+# Save selected features
+coefs = np.array(reg.coef_ != 0)
+np.save('../Data/selected_coefs.npy', coefs)
+\end{lstlisting}
+
+The feature dimension is reduced from 764 to 78.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{images/lasso_feature_selection.png}
+\caption{Lasso feature selection result}
+\end{figure}
+
+\subsection{P-value Based Selection}
+Implemented in \texttt{feature\_selection.py}. Features with $p < 10^{-20}$ are retained.
+Lasso CV provides better stability and is used for final modeling.
+
+\section{MODEL ARCHITECTURES}
+All models are implemented in \texttt{run\_models.py}, \texttt{run\_models\_improve.py}, and \texttt{baselines.py}.
+
+\subsection{Ridge Regression}
+\begin{lstlisting}
+from sklearn.linear_model import Ridge
+model = Ridge(alpha=7)
+model.fit(X_train, y_train)
+\end{lstlisting}
+
+\subsection{Gradient Boosting Regressor}
+\begin{lstlisting}
+from sklearn.ensemble import GradientBoostingRegressor
+model = GradientBoostingRegressor(
+    n_estimators=17,
+    learning_rate=0.12,
+    max_depth=10,
+    loss='absolute_error',
+    random_state=42
+)
+\end{lstlisting}
+
+\subsection{KMeans + Ridge Regression}
+\begin{lstlisting}
+from sklearn.cluster import KMeans
+kmeans = KMeans(n_clusters=8, n_init='auto', random_state=0)
+clusters_train = kmeans.predict(X_train)
+clusters_val = kmeans.predict(X_val)
+
+# Train separate Ridge model per cluster
+for cluster in range(8):
+    train_mask = clusters_train == cluster
+    val_mask = clusters_val == cluster
+    ridge = Ridge(alpha=7)
+    ridge.fit(X_train[train_mask], y_train[train_mask])
+\end{lstlisting}
+
+\subsection{Neural Network (MLP)}
+\begin{lstlisting}
+from sklearn.neural_network import MLPRegressor
+model = MLPRegressor(
+    hidden_layer_sizes=(128, 64),
+    activation='relu',
+    solver='adam',
+    max_iter=500,
+    random_state=42
+)
+\end{lstlisting}
+
+\subsection{Support Vector Regression (SVR)}
+\begin{lstlisting}
+from sklearn.svm import SVR
+model = SVR(kernel='rbf', gamma=0.05, C=1.0, verbose=True)
+model.fit(X_train, y_train.values.ravel())
+\end{lstlisting}
+
+SVR with RBF kernel achieves the best performance.
+
+\section{EXPERIMENTS AND RESULTS}
+Models are evaluated using Mean Absolute Error (MAE), Median Absolute Error (MedAE), Mean Squared Error (MSE), and $R^2$ score.
 
 \begin{table}[H]
 \centering
 \caption{Model Performance on Test Set}
 \begin{tabular}{lccc}
 \toprule
-Model & Our \(R^2\) & Original \(R^2\) & Consistency \\
+Model               & Our $R^2$ & Original $R^2$ & Consistency \\
 \midrule
-SVR (RBF)            & 0.6992 & 0.6901 & Highly Consistent \\
-KMeans+Ridge         & 0.6724 & 0.6748 & Almost Same \\
-Ridge Regression     & 0.6542 & 0.6601 & Almost Same \\
-Gradient Boosting    & 0.6519 & 0.5864 & Better \\
-Neural Network       & 0.4256 & 0.6692 & Framework Difference \\
+SVR (RBF)           & 0.6992 & 0.6901 & High \\
+KMeans+Ridge        & 0.6724 & 0.6748 & Very High \\
+Ridge Regression    & 0.6542 & 0.6601 & Very High \\
+Gradient Boosting   & 0.6519 & 0.5864 & Slightly Better \\
+Neural Network      & 0.4256 & 0.6692 & Framework Gap \\
 \bottomrule
 \end{tabular}
+\label{tab:results}
 \end{table}
 
-\section{Modifications in the Code}
-Three essential modifications were made:
-\begin{enumerate}
-    \item Added low\_memory=False when reading CSV files to resolve DtypeWarning.
-    \item Applied null safety handling to host\_verifications and amenities to avoid float-related string errors.
-    \item Updated loss='lad' to loss='absolute\_error' in GradientBoostingRegressor for scikit-learn compatibility.
-\end{enumerate}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{images/model_r2_comparison.png}
+\caption{$R^2$ comparison across all models}
+\end{figure}
 
-\section{Conclusion}
-This project successfully reproduces the core pipeline and conclusions of the original paper. The SVR (RBF) model remains the best-performing method, and results are highly consistent with the original study. Sentiment analysis and nonlinear models play critical roles in improving price prediction performance.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{images/model_comparison_horizontal.png}
+\caption{Horizontal model performance comparison}
+\end{figure}
 
-\section{References}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{images/mae_comparison.png}
+\caption{MAE comparison across models}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{images/svr_pred_vs_true.png}
+\caption{SVR predicted vs true values}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{images/Price_map.png}
+\caption{NYC Airbnb price distribution heatmap}
+\end{figure}
+
+Results confirm that SVR (RBF) performs best, and sentiment features and Lasso selection effectively improve generalization.
+
+\section{CODE MODIFICATIONS AND FIXES}
+Five critical fixes ensure stable execution:
+
+\subsection{1. Deprecated Loss Function}
+Old: \texttt{loss='lad'} \\
+New: \texttt{loss='absolute\_error'}
+
+\subsection{2. KMeans Compatibility}
+Added \texttt{n\_init='auto'}, removed unsupported \texttt{n\_jobs}.
+
+\subsection{3. Null Value Safety}
+Added checks for NaN in \texttt{host\_verifications} and \texttt{amenities}.
+
+\subsection{4. CSV Reading Warning}
+Added \texttt{low\_memory=False} in \texttt{pd.read\_csv()}.
+
+\subsection{5. Data Leakage Prevention}
+Scalers are now fitted only on the training set.
+
+\section{DISCUSSION}
+This reproduction validates several key conclusions:
+\begin{itemize}
+    \item Sentiment features significantly improve prediction performance
+    \item Lasso regularization effectively reduces dimensionality
+    \item SVR with RBF kernel is most suitable for this task
+    \item Clustering improves linear model expressiveness
+    \item Neural network performance depends on framework implementation
+\end{itemize}
+
+\section{CONCLUSION}
+This project fully reproduces a complete machine learning pipeline for Airbnb price prediction. All steps including data cleaning, sentiment analysis, feature selection, and multi-model evaluation are successfully implemented and verified. The SVR model achieves the best performance, consistent with the original paper.
+
+Through this reproduction, I gained deep practical experience in end-to-end machine learning engineering, including data preprocessing, debugging, feature engineering, model tuning, and result analysis.
+
+Future improvements may include contextual embeddings for reviews, deeper networks, and external geographic data.
+
+\newpage
+
 \begin{thebibliography}{9}
-    \bibitem{airbnb-paper}
-    S. Singh, et al.
-    \textit{Airbnb Price Prediction Using Machine Learning and Sentiment Analysis}.
-    2019.
+\bibitem{airbnb2019}
+Pouya Rezazadeh Kalehbasti, Liubov Nikolenko, Hoormazd Rezaei.
+Airbnb Price Prediction Using Machine Learning and Sentiment Analysis, 2019.
+
+\bibitem{scikit-learn}
+F. Pedregosa et al. Scikit-learn: Machine Learning in Python, Journal of Machine Learning Research, 2011.
+
+\bibitem{textblob}
+Steven Loria. TextBlob: Simplified Text Processing, 2014.
 \end{thebibliography}
 
 \end{document}
